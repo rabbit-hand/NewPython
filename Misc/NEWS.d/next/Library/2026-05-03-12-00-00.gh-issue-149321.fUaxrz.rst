@@ -1,2 +1,1 @@
-Fix import cycles exposed by running standard library modules with
-``-X lazy_imports=none``.
+Fix import cycles exposed when lazy imports are globally disabled.

@@ -3035,9 +3035,6 @@ _PyEval_LazyImportName(PyThreadState *tstate, PyObject *builtins,
     PyObject *res = NULL;
     // Check if global policy overrides the local syntax
     switch (PyImport_GetLazyImportsMode()) {
-        case PyImport_LAZY_NONE:
-            lazy = 0;
-            break;
         case PyImport_LAZY_ALL:
             lazy = 1;
             break;
@@ -3045,7 +3042,7 @@ _PyEval_LazyImportName(PyThreadState *tstate, PyObject *builtins,
             break;
     }
 
-    if (!lazy && PyImport_GetLazyImportsMode() != PyImport_LAZY_NONE) {
+    if (!lazy) {
         // See if __lazy_modules__ forces this to be lazy.
         lazy = check_lazy_import_compatibility(tstate, globals, name, level);
         if (lazy < 0) {

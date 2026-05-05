@@ -327,7 +327,7 @@ The following implementation-specific options are available:\n\
          log imports of already-loaded modules; also PYTHONPROFILEIMPORTTIME\n\
 -X int_max_str_digits=N: limit the size of int<->str conversions;\n\
          0 disables the limit; also PYTHONINTMAXSTRDIGITS\n\
--X lazy_imports=[all|none|normal]: control global lazy imports;\n\
+-X lazy_imports=[all|normal]: control global lazy imports;\n\
          default is normal; also PYTHON_LAZY_IMPORTS\n\
 -X no_debug_ranges: don't include extra location information in code objects;\n\
          also PYTHONNODEBUGRANGES\n\
@@ -949,7 +949,8 @@ config_check_consistency(const PyConfig *config)
     assert(config->int_max_str_digits >= 0);
     // cpu_count can be -1 if the user doesn't override it.
     assert(config->cpu_count != 0);
-    // lazy_imports can be -1 (default), 0 (off), or 1 (on).
+    // lazy_imports can be -1 (default) or 1 (on). 0 is rejected later
+    // for embedders with an error message.
     assert(config->lazy_imports >= -1 && config->lazy_imports <= 1);
     // config->use_frozen_modules is initialized later
     // by _PyConfig_InitImportConfig().
@@ -2321,15 +2322,12 @@ config_init_lazy_imports(PyConfig *config)
         if (strcmp(env, "all") == 0) {
             lazy_imports = 1;
         }
-        else if (strcmp(env, "none") == 0) {
-            lazy_imports = 0;
-        }
         else if (strcmp(env, "normal") == 0) {
             lazy_imports = -1;
         }
         else {
             return _PyStatus_ERR("PYTHON_LAZY_IMPORTS: invalid value; "
-                                 "expected 'all', 'none', or 'normal'");
+                                 "expected 'all' or 'normal'");
         }
         config->lazy_imports = lazy_imports;
     }
@@ -2339,15 +2337,12 @@ config_init_lazy_imports(PyConfig *config)
         if (wcscmp(x_value, L"all") == 0) {
             lazy_imports = 1;
         }
-        else if (wcscmp(x_value, L"none") == 0) {
-            lazy_imports = 0;
-        }
         else if (wcscmp(x_value, L"normal") == 0) {
             lazy_imports = -1;
         }
         else {
             return _PyStatus_ERR("-X lazy_imports: invalid value; "
-                                 "expected 'all', 'none', or 'normal'");
+                                 "expected 'all' or 'normal'");
         }
         config->lazy_imports = lazy_imports;
     }
