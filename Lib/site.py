@@ -390,36 +390,36 @@ def addsitedir(sitedir, known_paths=None, *, defer_processing_start_files=False)
     if not sitedircase in known_paths:
         sys.path.append(sitedir)        # Add path component
         known_paths.add(sitedircase)
-    try:
-        names = os.listdir(sitedir)
-    except OSError:
-        return
+        try:
+            names = os.listdir(sitedir)
+        except OSError:
+            return
 
-    # The following phases are defined by PEP 829.
-    # Phases 1-3: Read .pth files, accumulating paths and import lines.
-    pth_names = sorted(
-        name for name in names
-        if name.endswith(".pth") and not name.startswith(".")
-    )
-    for name in pth_names:
-        _read_pth_file(sitedir, name, known_paths)
+        # The following phases are defined by PEP 829.
+        # Phases 1-3: Read .pth files, accumulating paths and import lines.
+        pth_names = sorted(
+            name for name in names
+            if name.endswith(".pth") and not name.startswith(".")
+        )
+        for name in pth_names:
+            _read_pth_file(sitedir, name, known_paths)
 
-    # Phases 6-7: Discover .start files and accumulate their entry points.
-    # Import lines from .pth files with a matching .start file are discarded
-    # at flush time by _exec_imports().
-    start_names = sorted(
-        name for name in names
-        if name.endswith(".start") and not name.startswith(".")
-    )
-    for name in start_names:
-        _read_start_file(sitedir, name)
+        # Phases 6-7: Discover .start files and accumulate their entry points.
+        # Import lines from .pth files with a matching .start file are discarded
+        # at flush time by _exec_imports().
+        start_names = sorted(
+            name for name in names
+            if name.endswith(".start") and not name.startswith(".")
+        )
+        for name in start_names:
+            _read_start_file(sitedir, name)
 
-    # Generally, when addsitedir() is called explicitly, we'll want to process
-    # all the startup file data immediately.  However, when called through
-    # main(), we'll want to batch up all the startup file processing.  main()
-    # will set this flag to True to defer processing.
-    if not defer_processing_start_files:
-        process_startup_files()
+        # Generally, when addsitedir() is called explicitly, we'll want to process
+        # all the startup file data immediately.  However, when called through
+        # main(), we'll want to batch up all the startup file processing.  main()
+        # will set this flag to True to defer processing.
+        if not defer_processing_start_files:
+            process_startup_files()
 
     if reset:
         known_paths = None

@@ -118,6 +118,7 @@ class HelperFunctionsTests(unittest.TestCase):
                       "%s not in sys.modules" % pth_file.imported)
         self.assertIn(site.makepath(pth_file.good_dir_path)[0], sys.path)
         self.assertFalse(os.path.exists(pth_file.bad_dir_path))
+        self.assertFalse(os.path.exists(pth_file.idempotent_fail_path))
 
     def test_addpackage(self):
         # Make sure addpackage() imports if the line starts with 'import',
@@ -200,6 +201,16 @@ class HelperFunctionsTests(unittest.TestCase):
                             defer_processing_start_files=True)
             self.assertNotIn(pth_file.imported, sys.modules)
             site.process_startup_files()
+            self.pth_file_tests(pth_file)
+
+    def test_addsitedir_idempotent(self):
+        pth_file = PthFile()
+        pth_file.cleanup(prep=True)
+
+        with pth_file.create():
+            dirs = set()
+            dirs = site.addsitedir(pth_file.base_dir, dirs)
+            dirs = site.addsitedir(pth_file.base_dir, dirs)
             self.pth_file_tests(pth_file)
 
     def test_addsitedir_dotfile(self):
@@ -411,6 +422,7 @@ class PthFile:
         self.bad_dirname = bad_dirname
         self.good_dir_path = os.path.join(self.base_dir, self.good_dirname)
         self.bad_dir_path = os.path.join(self.base_dir, self.bad_dirname)
+        self.idempotent_fail_path = os.path.join(self.base_dir, 'idempotent')
 
     @contextlib.contextmanager
     def create(self):
@@ -427,6 +439,13 @@ class PthFile:
         try:
             print("#import @bad module name", file=FILE)
             print("\n", file=FILE)
+
+            PROG = f'''\
+if {self.imported!r} in sys.modules:
+    open({self.idempotent_fail_path!r}, 'a+').close()
+'''
+            print(f"import sys; exec({PROG!r})", file=FILE)
+
             print("import %s" % self.imported, file=FILE)
             print(self.good_dirname, file=FILE)
             print(self.bad_dirname, file=FILE)
@@ -455,6 +474,8 @@ class PthFile:
             os.rmdir(self.good_dir_path)
         if os.path.exists(self.bad_dir_path):
             os.rmdir(self.bad_dir_path)
+        if os.path.exists(self.idempotent_fail_path):
+            os.remove(self.idempotent_fail_path)
 
 class ImportSideEffectTests(unittest.TestCase):
     """Test side-effects from importing 'site'."""
