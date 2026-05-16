@@ -2102,5 +2102,856 @@ class LazyCApiTests(unittest.TestCase):
         self.assertRaises(ValueError, _testcapi.PyImport_SetLazyImportsFilter, 42)
 
 
+@support.requires_subprocess()
+class DictOperationsWithLazyTests(unittest.TestCase):
+    """Tests for dict operations with lazy import values.
+
+    Adapted from internal lazy imports tests: dict_tests, dict_update,
+    dict_values. Tests that dict.copy(), |, .update(), .values(), .items()
+    correctly handle lazy import proxy objects.
+    """
+
+    def test_dict_copy_preserves_lazy(self):
+        """dict.copy() should preserve lazy import objects."""
+        code = textwrap.dedent("""
+            import types
+
+            from test.test_lazy_import.data.metasyntactic import names
+
+            def check():
+                g = globals()
+                gcopy = g.copy()
+                assert type(gcopy["names"]) is types.LazyImportType, (
+                    f"Expected LazyImportType, got {type(gcopy['names'])}"
+                )
+                return True
+
+            assert check()
+            print("OK")
+        """)
+        result = subprocess.run(
+            [sys.executable, "-X", "lazy_imports=all", "-c", code],
+            capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0,
+                         f"stdout: {result.stdout}, stderr: {result.stderr}")
+        self.assertIn("OK", result.stdout)
+
+    def test_dict_copy_resolved_not_affect_original(self):
+        """Resolving values in a dict copy should not affect the original."""
+        code = textwrap.dedent("""
+            import types
+
+            from test.test_lazy_import.data.metasyntactic import names
+
+            def check():
+                g = globals()
+                gcopy = g.copy()
+                gcopy_resolved = gcopy.copy()
+                # Explicitly resolve lazy values using .resolve()
+                for key in list(gcopy_resolved):
+                    val = gcopy_resolved[key]
+                    if type(val) is types.LazyImportType:
+                        gcopy_resolved[key] = val.resolve()
+                assert type(gcopy["names"]) is types.LazyImportType
+                assert type(gcopy_resolved["names"]) is not types.LazyImportType
+                return True
+
+            assert check()
+            print("OK")
+        """)
+        result = subprocess.run(
+            [sys.executable, "-X", "lazy_imports=all", "-c", code],
+            capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0,
+                         f"stdout: {result.stdout}, stderr: {result.stderr}")
+        self.assertIn("OK", result.stdout)
+
+    def test_dict_or_operator_with_lazy(self):
+        """dict | operator should correctly handle lazy values."""
+        code = textwrap.dedent("""
+            import types
+
+            from test.test_lazy_import.data.metasyntactic import names
+
+            def check():
+                g = globals()
+                gcopy = g.copy()
+                gcopy_resolved = gcopy.copy()
+                for key in list(gcopy_resolved):
+                    val = gcopy_resolved[key]
+                    if type(val) is types.LazyImportType:
+                        gcopy_resolved[key] = val.resolve()
+
+                assert type(gcopy["names"]) is types.LazyImportType
+                assert type(gcopy_resolved["names"]) is not types.LazyImportType
+
+                # | operator: right side wins for shared keys
+                dict_or_resolved = gcopy | gcopy_resolved
+                assert type(dict_or_resolved["names"]) is not types.LazyImportType
+
+                dict_or_unresolved = gcopy_resolved | gcopy
+                assert type(dict_or_unresolved["names"]) is types.LazyImportType
+                return True
+
+            assert check()
+            print("OK")
+        """)
+        result = subprocess.run(
+            [sys.executable, "-X", "lazy_imports=all", "-c", code],
+            capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0,
+                         f"stdout: {result.stdout}, stderr: {result.stderr}")
+        self.assertIn("OK", result.stdout)
+
+    def test_dict_update_merges_lazy_values(self):
+        """dict.update() should correctly handle lazy values."""
+        code = textwrap.dedent("""
+            import types
+
+            from test.test_lazy_import.data.metasyntactic import names
+
+            def check():
+                g = globals()
+                gcopy = g.copy()
+                gcopy_resolved = gcopy.copy()
+                for key in list(gcopy_resolved):
+                    val = gcopy_resolved[key]
+                    if type(val) is types.LazyImportType:
+                        gcopy_resolved[key] = val.resolve()
+
+                # Update lazy dict with resolved values -> should be resolved
+                gcopy.update(gcopy_resolved)
+                assert type(gcopy["names"]) is not types.LazyImportType
+
+                # Update with original (lazy) values -> should be lazy again
+                gcopy.update(g)
+                assert type(gcopy["names"]) is types.LazyImportType
+                return True
+
+            assert check()
+            print("OK")
+        """)
+        result = subprocess.run(
+            [sys.executable, "-X", "lazy_imports=all", "-c", code],
+            capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0,
+                         f"stdout: {result.stdout}, stderr: {result.stderr}")
+        self.assertIn("OK", result.stdout)
+
+    def test_dict_update_resolves_on_access(self):
+        """Accessing a value from dict.update() result should resolve it."""
+        code = textwrap.dedent("""
+            import warnings
+
+            vars = {}
+            vars.update(globals())
+
+            result = vars['warnings']
+            assert result == warnings
+            print("OK")
+        """)
+        result = subprocess.run(
+            [sys.executable, "-X", "lazy_imports=all", "-c", code],
+            capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0,
+                         f"stdout: {result.stdout}, stderr: {result.stderr}")
+        self.assertIn("OK", result.stdout)
+
+    def test_dict_lazy_objects_survive_operations(self):
+        """Dict operations (values/items/copy) should work with lazy objects."""
+        code = textwrap.dedent("""
+            import types
+
+            from test.test_lazy_import.data.metasyntactic import names
+            from test.test_lazy_import.data.metasyntactic.names import *
+
+            g = globals().copy()
+
+            # Verify lazy objects are present in the copy
+            def has_lazy(d):
+                return any(
+                    type(v) is types.LazyImportType
+                    for v in d.values()
+                )
+
+            def check():
+                gcopy = g.copy()
+                assert has_lazy(gcopy), "Expected lazy objects in copy"
+
+                # values() and items() should work without errors
+                vals = list(gcopy.values())
+                items = list(gcopy.items())
+                assert len(vals) > 0
+                assert len(items) > 0
+
+                # Explicit resolution via .resolve() should work
+                for key in list(gcopy):
+                    val = gcopy[key]
+                    if type(val) is types.LazyImportType:
+                        gcopy[key] = val.resolve()
+                assert not has_lazy(gcopy), "All values should be resolved"
+
+                # Verify resolved values are correct
+                assert gcopy["Metasyntactic"] == "Metasyntactic"
+                return True
+
+            assert check()
+            print("OK")
+        """)
+        result = subprocess.run(
+            [sys.executable, "-X", "lazy_imports=all", "-c", code],
+            capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0,
+                         f"stdout: {result.stdout}, stderr: {result.stderr}")
+        self.assertIn("OK", result.stdout)
+
+
+@support.requires_subprocess()
+class FromImportStarLazyTests(unittest.TestCase):
+    """Tests for 'from X import *' with lazy imports.
+
+    Adapted from internal lazy imports test: from_import_star.
+    Verifies that 'from foo import *' preserves laziness for names
+    that are themselves lazy imports in the source module.
+    """
+
+    def test_from_import_star_resolves_values(self):
+        """from X import * should resolve lazy values and import them eagerly."""
+        code = textwrap.dedent("""
+            import types
+
+            from test.test_lazy_import.data.metasyntactic.names import *
+
+            def check():
+                g = globals()
+                # from ... import * resolves the source module's lazy values,
+                # so the imported names should be resolved (not LazyImportType)
+                assert type(g["Foo"]) is not types.LazyImportType, (
+                    f"Expected resolved value for Foo, got {type(g['Foo'])}"
+                )
+                assert g["Foo"] == "Foo"
+                assert g["Bar"] == "Bar"
+                assert g["Ack"] == "Ack"
+                # Metasyntactic is a direct assignment
+                assert g["Metasyntactic"] == "Metasyntactic"
+                return True
+
+            assert check()
+            print("OK")
+        """)
+        result = subprocess.run(
+            [sys.executable, "-X", "lazy_imports=all", "-c", code],
+            capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0,
+                         f"stdout: {result.stdout}, stderr: {result.stderr}")
+        self.assertIn("OK", result.stdout)
+
+
+@support.requires_subprocess()
+class SubmoduleLazinessTests(unittest.TestCase):
+    """Tests for submodule laziness behavior.
+
+    Adapted from internal lazy imports tests: lazy_submodules, lazy_side_effects.
+    Tests that submodules remain lazy when not accessed.
+    """
+
+    def test_submodule_stays_lazy_when_unused(self):
+        """Submodules imported with 'as' should stay lazy until accessed."""
+        code = textwrap.dedent("""
+            import sys
+
+            import test.test_lazy_import.data.metasyntactic
+            import test.test_lazy_import.data.metasyntactic.foo.bar as bar
+            import test.test_lazy_import.data.metasyntactic.foo.ack as ack
+
+            bar.Bar  # access bar to trigger resolution
+
+            assert "test.test_lazy_import.data.metasyntactic.foo.bar" in sys.modules
+            assert "test.test_lazy_import.data.metasyntactic.foo.ack" not in sys.modules
+            print("OK")
+        """)
+        result = subprocess.run(
+            [sys.executable, "-X", "lazy_imports=all", "-c", code],
+            capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0,
+                         f"stdout: {result.stdout}, stderr: {result.stderr}")
+        self.assertIn("OK", result.stdout)
+
+    def test_submodule_access_triggers_parent_resolution(self):
+        """Accessing a submodule attribute should resolve the parent chain."""
+        code = textwrap.dedent("""
+            import test.test_lazy_import.data.metasyntactic.waldo.fred
+
+            waldo = test.test_lazy_import.data.metasyntactic.waldo
+            assert waldo.Waldo == "Waldo"
+            print("OK")
+        """)
+        result = subprocess.run(
+            [sys.executable, "-X", "lazy_imports=all", "-c", code],
+            capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0,
+                         f"stdout: {result.stdout}, stderr: {result.stderr}")
+        self.assertIn("OK", result.stdout)
+
+    def test_lazy_side_effects_from_import(self):
+        """from-import should not trigger side effects of sibling submodules."""
+        code = textwrap.dedent("""
+            import types
+
+            import test.test_lazy_import.data.metasyntactic.foo.bar
+            from test.test_lazy_import.data.metasyntactic.foo import ack
+            import test.test_lazy_import.data.metasyntactic.foo as foo
+
+            assert foo.bar.Bar == "Bar"
+
+            # ack was imported lazily via 'from ... import ack',
+            # so accessing foo.ack should still be lazy (not yet loaded)
+            def check():
+                g = globals()
+                return type(g["ack"]) is types.LazyImportType
+
+            assert check(), "ack should still be lazy"
+            print("OK")
+        """)
+        result = subprocess.run(
+            [sys.executable, "-X", "lazy_imports=all", "-c", code],
+            capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0,
+                         f"stdout: {result.stdout}, stderr: {result.stderr}")
+        self.assertIn("OK", result.stdout)
+
+    def test_split_fromlist_selective_laziness(self):
+        """from X import a, b should keep unaccessed names lazy."""
+        code = textwrap.dedent("""
+            import sys
+            import types
+
+            from test.test_lazy_import.data.metasyntactic import foo, waldo
+
+            foo  # trigger loading of foo
+
+            assert "test.test_lazy_import.data.metasyntactic.foo" in sys.modules
+
+            def check():
+                g = globals()
+                return type(g["waldo"]) is types.LazyImportType
+
+            assert check(), "waldo should still be lazy"
+            assert "test.test_lazy_import.data.metasyntactic.waldo" not in sys.modules
+            print("OK")
+        """)
+        result = subprocess.run(
+            [sys.executable, "-X", "lazy_imports=all", "-c", code],
+            capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0,
+                         f"stdout: {result.stdout}, stderr: {result.stderr}")
+        self.assertIn("OK", result.stdout)
+
+
+@support.requires_subprocess()
+class AttributeSideEffectTests(unittest.TestCase):
+    """Tests for attribute side effects with lazy imports.
+
+    Adapted from internal lazy imports tests: attribute_side_effect,
+    lazy_attribute_side_effect. Tests that submodule imports don't
+    overwrite parent module attributes.
+    """
+
+    def test_submodule_import_no_overwrite_parent_attrs(self):
+        """Importing a package with __version__ submodule should not
+        overwrite the parent's __version__ attribute."""
+        code = textwrap.dedent("""
+            import test.test_lazy_import.data.versioned as versioned
+
+            assert versioned.__copyright__ == (
+                "Copyright (c) 2001-2022 Python Software Foundation."
+            ), f"Got: {versioned.__copyright__!r}"
+            assert versioned.__version__ == "1.0", (
+                f"Got: {versioned.__version__!r}"
+            )
+            print("OK")
+        """)
+        result = subprocess.run(
+            [sys.executable, "-X", "lazy_imports=normal", "-c", code],
+            capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0,
+                         f"stdout: {result.stdout}, stderr: {result.stderr}")
+        self.assertIn("OK", result.stdout)
+
+    def test_eager_import_in_try_no_overwrite_lazy_attrs(self):
+        """Eager import in try/except should not overwrite lazy attributes."""
+        code = textwrap.dedent("""
+            try:
+                import test.test_lazy_import.data.versioned as versioned
+            finally:
+                pass
+
+            assert versioned.__copyright__ == (
+                "Copyright (c) 2001-2022 Python Software Foundation."
+            ), f"Got: {versioned.__copyright__!r}"
+            assert versioned.__version__ == "1.0", (
+                f"Got: {versioned.__version__!r}"
+            )
+            print("OK")
+        """)
+        result = subprocess.run(
+            [sys.executable, "-X", "lazy_imports=normal", "-c", code],
+            capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0,
+                         f"stdout: {result.stdout}, stderr: {result.stderr}")
+        self.assertIn("OK", result.stdout)
+
+
+@support.requires_subprocess()
+class ModuleVariableNameCollisionTests(unittest.TestCase):
+    """Tests for name collision between submodule and variable.
+
+    Adapted from internal lazy imports test: import_same_name_variable.
+    Tests behavior when a module has both a submodule and a variable
+    with the same name, in different definition orders.
+    """
+
+    def test_import_then_assign_variable_wins_in_normal(self):
+        """In normal mode, import then assign: variable wins (overwrites)."""
+        code = textwrap.dedent("""
+            from test.test_lazy_import.data import module_same_name_var_order1
+            assert module_same_name_var_order1.bar == "Blah", (
+                f"Got: {module_same_name_var_order1.bar!r}"
+            )
+            print("OK")
+        """)
+        result = subprocess.run(
+            [sys.executable, "-X", "lazy_imports=normal", "-c", code],
+            capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0,
+                         f"stdout: {result.stdout}, stderr: {result.stderr}")
+        self.assertIn("OK", result.stdout)
+
+    def test_assign_then_import_module_wins_in_normal(self):
+        """In normal mode, assign then import: import wins (overwrites)."""
+        code = textwrap.dedent("""
+            import sys
+            from test.test_lazy_import.data import module_same_name_var_order2
+            expected = sys.modules[
+                "test.test_lazy_import.data.module_same_name_var_order2.bar"
+            ]
+            assert module_same_name_var_order2.bar is expected, (
+                f"Got: {module_same_name_var_order2.bar!r}"
+            )
+            print("OK")
+        """)
+        result = subprocess.run(
+            [sys.executable, "-X", "lazy_imports=normal", "-c", code],
+            capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0,
+                         f"stdout: {result.stdout}, stderr: {result.stderr}")
+        self.assertIn("OK", result.stdout)
+
+
+@support.requires_subprocess()
+class DeletedModuleReimportTests(unittest.TestCase):
+    """Tests for reimporting after module deletion from sys.modules.
+
+    Adapted from internal lazy imports tests: deleted_side_effects,
+    dict_delete. Tests that deleting a module from sys.modules and
+    reimporting works correctly.
+    """
+
+    def test_deleted_module_reimport_creates_new_module(self):
+        """Deleting and reimporting a module should create a new object."""
+        code = textwrap.dedent("""
+            import sys
+
+            import test.test_lazy_import.data.metasyntactic.foo
+            import test.test_lazy_import.data.metasyntactic.foo.bar.baz
+
+            first_bar = test.test_lazy_import.data.metasyntactic.foo.bar
+
+            del sys.modules["test.test_lazy_import.data.metasyntactic.foo.bar"]
+
+            import test.test_lazy_import.data.metasyntactic.foo.bar.thud
+
+            second_bar = test.test_lazy_import.data.metasyntactic.foo.bar
+
+            assert "test.test_lazy_import.data.metasyntactic.foo.bar" in sys.modules
+            sys_modules_bar = sys.modules[
+                "test.test_lazy_import.data.metasyntactic.foo.bar"
+            ]
+
+            assert first_bar is not second_bar
+            assert sys_modules_bar is not first_bar
+            assert sys_modules_bar is second_bar
+
+            assert "baz" in dir(first_bar)
+            assert "thud" not in dir(first_bar)
+
+            assert "baz" not in dir(second_bar)
+            assert "thud" in dir(second_bar)
+
+            print("OK")
+        """)
+        result = subprocess.run(
+            [sys.executable, "-X", "lazy_imports=normal", "-c", code],
+            capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0,
+                         f"stdout: {result.stdout}, stderr: {result.stderr}")
+        self.assertIn("OK", result.stdout)
+
+    def test_deleted_module_reimport_with_lazy_submodule(self):
+        """Reimporting after module deletion should create lazy submodules."""
+        code = textwrap.dedent("""
+            import sys
+            import types
+            sys.set_lazy_imports("all")
+
+            import test.test_lazy_import.data.metasyntactic.waldo
+            # Force resolution
+            _ = test.test_lazy_import.data.metasyntactic.waldo.Waldo
+            import test.test_lazy_import.data.metasyntactic.waldo.fred
+
+            waldo_key = "test.test_lazy_import.data.metasyntactic.waldo"
+            assert waldo_key in sys.modules
+
+            del sys.modules[waldo_key]
+
+            # Reimport and force resolution
+            sys.set_lazy_imports("normal")
+            import test.test_lazy_import.data.metasyntactic.waldo
+            waldo_mod = test.test_lazy_import.data.metasyntactic.waldo
+            assert waldo_key in sys.modules
+
+            # Now enable lazy and import fred
+            sys.set_lazy_imports("all")
+            import test.test_lazy_import.data.metasyntactic.waldo.fred
+
+            def check():
+                return type(waldo_mod.__dict__.get("fred")) is types.LazyImportType
+
+            assert check(), (
+                f"fred should be lazy, got {type(waldo_mod.__dict__.get('fred'))}"
+            )
+            print("OK")
+        """)
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0,
+                         f"stdout: {result.stdout}, stderr: {result.stderr}")
+        self.assertIn("OK", result.stdout)
+
+
+@support.requires_subprocess()
+class CircularImportLazyTests(unittest.TestCase):
+    """Tests for circular imports with lazy imports.
+
+    Adapted from internal lazy imports tests: circular_import,
+    cycle_with_load_global, deferred_resolve_failure.
+    Tests that lazy imports can break certain circular import patterns.
+    """
+
+    def test_same_level_circular_import_succeeds_with_lazy(self):
+        """Circular imports at the same level should succeed with lazy mode."""
+        code = textwrap.dedent("""
+            import test.test_lazy_import.data.circular_import_pkg.main
+            print("OK")
+        """)
+        result = subprocess.run(
+            [sys.executable, "-X", "lazy_imports=all", "-c", code],
+            capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0,
+                         f"stdout: {result.stdout}, stderr: {result.stderr}")
+        self.assertIn("OK", result.stdout)
+
+    def test_same_level_circular_import_fails_without_lazy(self):
+        """Circular imports at the same level should fail without lazy mode."""
+        code = textwrap.dedent("""
+            import test.test_lazy_import.data.circular_import_pkg.main
+        """)
+        result = subprocess.run(
+            [sys.executable, "-X", "lazy_imports=none", "-c", code],
+            capture_output=True, text=True
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("ImportError", result.stderr)
+
+    def test_cycle_with_load_global_raises_import_error(self):
+        """Circular import with LOAD_GLOBAL should raise ImportError."""
+        code = textwrap.dedent("""
+            try:
+                from test.test_lazy_import.data.cycle_with_load_global_pkg import a
+                a  # force resolution
+            except ImportError as e:
+                if "circular import" not in str(e):
+                    raise
+                print("OK")
+        """)
+        for flag in ("all", "normal"):
+            with self.subTest(mode=flag):
+                result = subprocess.run(
+                    [sys.executable, "-X", f"lazy_imports={flag}", "-c", code],
+                    capture_output=True, text=True
+                )
+                self.assertEqual(result.returncode, 0,
+                                 f"stdout: {result.stdout}, stderr: {result.stderr}")
+                self.assertIn("OK", result.stdout)
+
+    def test_deferred_resolve_failure_succeeds_with_lazy(self):
+        """Cross-level circular imports should succeed with lazy mode."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pkg = os.path.join(tmpdir, "dfr_pkg")
+            utils = os.path.join(pkg, "utilities")
+            os.makedirs(utils)
+
+            for d in (pkg, utils):
+                with open(os.path.join(d, "__init__.py"), "w") as f:
+                    pass
+
+            with open(os.path.join(pkg, "main.py"), "w") as f:
+                f.write("from dfr_pkg import type_mod\n")
+                f.write("from dfr_pkg.utilities import type_from_ast\n")
+
+            with open(os.path.join(pkg, "type_mod.py"), "w") as f:
+                f.write("from dfr_pkg.utilities import value_from_ast\n")
+                f.write("value_from_ast = value_from_ast\n")
+                f.write("class GraphQLSchema: pass\n")
+
+            with open(os.path.join(utils, "__init__.py"), "w") as f:
+                f.write("from dfr_pkg.utilities.type_from_ast import "
+                        "type_from_ast\n")
+                f.write("value_from_ast = 'value_from_ast'\n")
+
+            with open(os.path.join(utils, "type_from_ast.py"), "w") as f:
+                f.write("from dfr_pkg.type_mod import GraphQLSchema\n")
+                f.write("def type_from_ast(schema: GraphQLSchema): pass\n")
+
+            env = os.environ.copy()
+            env["PYTHONPATH"] = tmpdir
+
+            # With lazy: should succeed
+            result = subprocess.run(
+                [sys.executable, "-X", "lazy_imports=all",
+                 "-c", "import dfr_pkg.main; print('OK')"],
+                capture_output=True, text=True, env=env
+            )
+            self.assertEqual(result.returncode, 0,
+                             f"stdout: {result.stdout}, stderr: {result.stderr}")
+            self.assertIn("OK", result.stdout)
+
+            # Without lazy: should fail
+            result = subprocess.run(
+                [sys.executable, "-X", "lazy_imports=none",
+                 "-c", "import dfr_pkg.main"],
+                capture_output=True, text=True, env=env
+            )
+            self.assertNotEqual(result.returncode, 0)
+
+
+@support.requires_subprocess()
+class BuiltinsOverrideLazyTests(unittest.TestCase):
+    """Tests for custom __import__ with lazy imports.
+
+    Adapted from internal lazy imports test: builtins_override.
+    Tests that exec with custom __builtins__.__import__ is respected.
+    """
+
+    def test_exec_uses_custom_import(self):
+        """exec() with custom __builtins__.__import__ should use it."""
+        code = textwrap.dedent("""
+            used_overridden_import = False
+
+            def replaced_import(*args):
+                global used_overridden_import
+                used_overridden_import = True
+
+            exec(
+                "import os; os",
+                {"__builtins__": {"__import__": replaced_import}}
+            )
+            assert used_overridden_import
+            print("OK")
+        """)
+        result = subprocess.run(
+            [sys.executable, "-X", "lazy_imports=normal", "-c", code],
+            capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0,
+                         f"stdout: {result.stdout}, stderr: {result.stderr}")
+        self.assertIn("OK", result.stdout)
+
+    def test_exec_uses_custom_import_with_lazy(self):
+        """exec() with custom __builtins__ including __lazy_import__."""
+        code = textwrap.dedent("""
+            used_overridden_import = False
+
+            def replaced_import(*args):
+                global used_overridden_import
+                used_overridden_import = True
+
+            def replaced_lazy_import(*args, **kwargs):
+                global used_overridden_import
+                used_overridden_import = True
+
+            exec(
+                "import os; os",
+                {"__builtins__": {
+                    "__import__": replaced_import,
+                    "__lazy_import__": replaced_lazy_import,
+                }}
+            )
+            assert used_overridden_import
+            print("OK")
+        """)
+        result = subprocess.run(
+            [sys.executable, "-X", "lazy_imports=all", "-c", code],
+            capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0,
+                         f"stdout: {result.stdout}, stderr: {result.stderr}")
+        self.assertIn("OK", result.stdout)
+
+
+@support.requires_subprocess()
+class DictMutationDuringLoadTests(unittest.TestCase):
+    """Tests for dict mutations during module loading.
+
+    Adapted from internal lazy imports test: dict_changes_when_loading.
+    Tests that a module dict can be safely mutated during loading
+    when lazy imports resolve.
+    """
+
+    def test_dict_mutation_during_import_no_crash(self):
+        """Mutating module dict during import should not crash."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pkg = os.path.join(tmpdir, "dcwl_pkg")
+            os.makedirs(pkg)
+
+            with open(os.path.join(pkg, "__init__.py"), "w") as f:
+                f.write(textwrap.dedent("""\
+                    from .elements import elements_function
+
+                    def __go(lcls):
+                        global __all__
+                        __all__ = sorted(
+                            name
+                            for name, obj in lcls.items()
+                            if not name.startswith("_")
+                        )
+
+                    __go(locals())
+                """))
+
+            with open(os.path.join(pkg, "elements.py"), "w") as f:
+                f.write(textwrap.dedent("""\
+                    from .elements_sub import elements_sub_function
+
+                    def elements_function():
+                        pass
+                """))
+
+            with open(os.path.join(pkg, "elements_sub.py"), "w") as f:
+                f.write(textwrap.dedent("""\
+                    def elements_sub_function():
+                        pass
+                """))
+
+            env = os.environ.copy()
+            env["PYTHONPATH"] = tmpdir
+
+            result = subprocess.run(
+                [sys.executable, "-X", "lazy_imports=all",
+                 "-c", "import dcwl_pkg; print('OK')"],
+                capture_output=True, text=True, env=env
+            )
+            self.assertEqual(result.returncode, 0,
+                             f"stdout: {result.stdout}, stderr: {result.stderr}")
+            self.assertIn("OK", result.stdout)
+
+
+@support.requires_subprocess()
+class EnableDisableLazyAtRuntimeTests(unittest.TestCase):
+    """Tests for enabling and disabling lazy imports at runtime.
+
+    Adapted from internal lazy imports tests: enable_lazy_imports_at_runtime,
+    disable_lazy_imports. Tests that sys.set_lazy_imports() can toggle
+    lazy imports during program execution.
+    """
+
+    def test_enable_lazy_at_runtime(self):
+        """sys.set_lazy_imports('all') should make subsequent imports lazy."""
+        code = textwrap.dedent("""
+            import sys
+            import types
+
+            from test.test_lazy_import.data.metasyntactic import foo
+            # Should be eager (no lazy mode yet)
+            assert 'test.test_lazy_import.data.metasyntactic.foo' in sys.modules
+
+            sys.set_lazy_imports("all")
+            assert sys.get_lazy_imports() == "all"
+
+            from test.test_lazy_import.data.metasyntactic import plugh
+
+            def check():
+                g = globals()
+                return type(g["plugh"]) is types.LazyImportType
+
+            assert check(), "plugh should be lazy after enabling lazy mode"
+
+            # Disable and import should be eager
+            sys.set_lazy_imports("none")
+
+            from test.test_lazy_import.data.metasyntactic import waldo
+            assert 'test.test_lazy_import.data.metasyntactic.waldo' in sys.modules
+            print("OK")
+        """)
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0,
+                         f"stdout: {result.stdout}, stderr: {result.stderr}")
+        self.assertIn("OK", result.stdout)
+
+    def test_disable_lazy_at_runtime(self):
+        """sys.set_lazy_imports('none') should disable lazy imports."""
+        code = textwrap.dedent("""
+            import sys
+
+            assert sys.get_lazy_imports() == "all"
+
+            sys.set_lazy_imports("none")
+            assert sys.get_lazy_imports() == "none"
+
+            lazy import json
+            assert 'json' in sys.modules, "json should be eager after disabling"
+            print("OK")
+        """)
+        result = subprocess.run(
+            [sys.executable, "-X", "lazy_imports=all", "-c", code],
+            capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0,
+                         f"stdout: {result.stdout}, stderr: {result.stderr}")
+        self.assertIn("OK", result.stdout)
+
+
 if __name__ == '__main__':
     unittest.main()
