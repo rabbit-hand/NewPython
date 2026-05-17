@@ -89,7 +89,7 @@ const uint32_t _PyUop_Flags[MAX_UOP_ID+1] = {
     [_UNARY_NOT] = 0,
     [_TO_BOOL] = HAS_ERROR_FLAG | HAS_ESCAPES_FLAG,
     [_TO_BOOL_BOOL] = HAS_EXIT_FLAG,
-    [_TO_BOOL_INT] = 0,
+    [_TO_BOOL_BIT_INT] = HAS_ESCAPES_FLAG,
     [_GUARD_NOS_LIST] = HAS_EXIT_FLAG,
     [_GUARD_TOS_LIST] = HAS_EXIT_FLAG,
     [_GUARD_TOS_SLICE] = HAS_EXIT_FLAG,
@@ -98,7 +98,7 @@ const uint32_t _PyUop_Flags[MAX_UOP_ID+1] = {
     [_GUARD_NOS_COMPACT_ASCII] = HAS_EXIT_FLAG,
     [_GUARD_NOS_UNICODE] = HAS_EXIT_FLAG,
     [_GUARD_TOS_UNICODE] = HAS_EXIT_FLAG,
-    [_TO_BOOL_STR] = 0,
+    [_TO_BOOL_BIT_STR] = HAS_ESCAPES_FLAG,
     [_REPLACE_WITH_TRUE] = 0,
     [_UNARY_INVERT] = HAS_ERROR_FLAG | HAS_ERROR_NO_POP_FLAG | HAS_ESCAPES_FLAG,
     [_GUARD_NOS_INT] = HAS_EXIT_FLAG,
@@ -393,6 +393,10 @@ const uint32_t _PyUop_Flags[MAX_UOP_ID+1] = {
     [_GUARD_BIT_IS_UNSET_POP_6] = HAS_EXIT_FLAG,
     [_GUARD_BIT_IS_UNSET_POP_7] = HAS_EXIT_FLAG,
     [_GUARD_BIT_IS_UNSET_POP] = HAS_ARG_FLAG | HAS_EXIT_FLAG,
+    [_BIT_TO_BOOL] = HAS_ESCAPES_FLAG,
+    [_BOOL_TO_BIT] = HAS_ESCAPES_FLAG,
+    [_GUARD_IS_TRUE_BIT_POP] = HAS_EXIT_FLAG | HAS_ESCAPES_FLAG,
+    [_GUARD_IS_FALSE_BIT_POP] = HAS_EXIT_FLAG | HAS_ESCAPES_FLAG,
     [_GUARD_IS_NONE_POP] = HAS_EXIT_FLAG,
     [_GUARD_IS_NOT_NONE_POP] = HAS_EXIT_FLAG | HAS_ESCAPES_FLAG,
     [_JUMP_TO_TOP] = 0,
@@ -935,12 +939,12 @@ const _PyUopCachingInfo _PyUop_Caching[MAX_UOP_ID+1] = {
             { 3, 3, _TO_BOOL_BOOL_r33 },
         },
     },
-    [_TO_BOOL_INT] = {
-        .best = { 0, 1, 2, 2 },
+    [_TO_BOOL_BIT_INT] = {
+        .best = { 1, 1, 1, 1 },
         .entries = {
-            { 2, 0, _TO_BOOL_INT_r02 },
-            { 2, 1, _TO_BOOL_INT_r12 },
-            { 3, 2, _TO_BOOL_INT_r23 },
+            { -1, -1, -1 },
+            { 1, 1, _TO_BOOL_BIT_INT_r11 },
+            { -1, -1, -1 },
             { -1, -1, -1 },
         },
     },
@@ -1016,12 +1020,12 @@ const _PyUopCachingInfo _PyUop_Caching[MAX_UOP_ID+1] = {
             { 3, 3, _GUARD_TOS_UNICODE_r33 },
         },
     },
-    [_TO_BOOL_STR] = {
-        .best = { 0, 1, 2, 2 },
+    [_TO_BOOL_BIT_STR] = {
+        .best = { 1, 1, 1, 1 },
         .entries = {
-            { 2, 0, _TO_BOOL_STR_r02 },
-            { 2, 1, _TO_BOOL_STR_r12 },
-            { 3, 2, _TO_BOOL_STR_r23 },
+            { -1, -1, -1 },
+            { 1, 1, _TO_BOOL_BIT_STR_r11 },
+            { -1, -1, -1 },
             { -1, -1, -1 },
         },
     },
@@ -3671,6 +3675,42 @@ const _PyUopCachingInfo _PyUop_Caching[MAX_UOP_ID+1] = {
             { 2, 2, _GUARD_BIT_IS_UNSET_POP_r32 },
         },
     },
+    [_BIT_TO_BOOL] = {
+        .best = { 1, 1, 1, 1 },
+        .entries = {
+            { -1, -1, -1 },
+            { 1, 1, _BIT_TO_BOOL_r11 },
+            { -1, -1, -1 },
+            { -1, -1, -1 },
+        },
+    },
+    [_BOOL_TO_BIT] = {
+        .best = { 1, 1, 1, 1 },
+        .entries = {
+            { -1, -1, -1 },
+            { 1, 1, _BOOL_TO_BIT_r11 },
+            { -1, -1, -1 },
+            { -1, -1, -1 },
+        },
+    },
+    [_GUARD_IS_TRUE_BIT_POP] = {
+        .best = { 1, 1, 1, 1 },
+        .entries = {
+            { -1, -1, -1 },
+            { 0, 0, _GUARD_IS_TRUE_BIT_POP_r10 },
+            { -1, -1, -1 },
+            { -1, -1, -1 },
+        },
+    },
+    [_GUARD_IS_FALSE_BIT_POP] = {
+        .best = { 1, 1, 1, 1 },
+        .entries = {
+            { -1, -1, -1 },
+            { 0, 0, _GUARD_IS_FALSE_BIT_POP_r10 },
+            { -1, -1, -1 },
+            { -1, -1, -1 },
+        },
+    },
     [_GUARD_IS_NONE_POP] = {
         .best = { 0, 1, 2, 3 },
         .entries = {
@@ -4096,9 +4136,7 @@ const uint16_t _PyUop_Uncached[MAX_UOP_REGS_ID+1] = {
     [_TO_BOOL_BOOL_r11] = _TO_BOOL_BOOL,
     [_TO_BOOL_BOOL_r22] = _TO_BOOL_BOOL,
     [_TO_BOOL_BOOL_r33] = _TO_BOOL_BOOL,
-    [_TO_BOOL_INT_r02] = _TO_BOOL_INT,
-    [_TO_BOOL_INT_r12] = _TO_BOOL_INT,
-    [_TO_BOOL_INT_r23] = _TO_BOOL_INT,
+    [_TO_BOOL_BIT_INT_r11] = _TO_BOOL_BIT_INT,
     [_GUARD_NOS_LIST_r02] = _GUARD_NOS_LIST,
     [_GUARD_NOS_LIST_r12] = _GUARD_NOS_LIST,
     [_GUARD_NOS_LIST_r22] = _GUARD_NOS_LIST,
@@ -4130,9 +4168,7 @@ const uint16_t _PyUop_Uncached[MAX_UOP_REGS_ID+1] = {
     [_GUARD_TOS_UNICODE_r11] = _GUARD_TOS_UNICODE,
     [_GUARD_TOS_UNICODE_r22] = _GUARD_TOS_UNICODE,
     [_GUARD_TOS_UNICODE_r33] = _GUARD_TOS_UNICODE,
-    [_TO_BOOL_STR_r02] = _TO_BOOL_STR,
-    [_TO_BOOL_STR_r12] = _TO_BOOL_STR,
-    [_TO_BOOL_STR_r23] = _TO_BOOL_STR,
+    [_TO_BOOL_BIT_STR_r11] = _TO_BOOL_BIT_STR,
     [_REPLACE_WITH_TRUE_r02] = _REPLACE_WITH_TRUE,
     [_REPLACE_WITH_TRUE_r12] = _REPLACE_WITH_TRUE,
     [_REPLACE_WITH_TRUE_r23] = _REPLACE_WITH_TRUE,
@@ -4761,6 +4797,10 @@ const uint16_t _PyUop_Uncached[MAX_UOP_REGS_ID+1] = {
     [_GUARD_BIT_IS_UNSET_POP_r10] = _GUARD_BIT_IS_UNSET_POP,
     [_GUARD_BIT_IS_UNSET_POP_r21] = _GUARD_BIT_IS_UNSET_POP,
     [_GUARD_BIT_IS_UNSET_POP_r32] = _GUARD_BIT_IS_UNSET_POP,
+    [_BIT_TO_BOOL_r11] = _BIT_TO_BOOL,
+    [_BOOL_TO_BIT_r11] = _BOOL_TO_BIT,
+    [_GUARD_IS_TRUE_BIT_POP_r10] = _GUARD_IS_TRUE_BIT_POP,
+    [_GUARD_IS_FALSE_BIT_POP_r10] = _GUARD_IS_FALSE_BIT_POP,
     [_GUARD_IS_NONE_POP_r00] = _GUARD_IS_NONE_POP,
     [_GUARD_IS_NONE_POP_r10] = _GUARD_IS_NONE_POP,
     [_GUARD_IS_NONE_POP_r21] = _GUARD_IS_NONE_POP,
@@ -5006,6 +5046,10 @@ const char *const _PyOpcode_uop_name[MAX_UOP_REGS_ID+1] = {
     [_BINARY_OP_TRUEDIV_FLOAT_INPLACE_RIGHT_r23] = "_BINARY_OP_TRUEDIV_FLOAT_INPLACE_RIGHT_r23",
     [_BINARY_SLICE] = "_BINARY_SLICE",
     [_BINARY_SLICE_r31] = "_BINARY_SLICE_r31",
+    [_BIT_TO_BOOL] = "_BIT_TO_BOOL",
+    [_BIT_TO_BOOL_r11] = "_BIT_TO_BOOL_r11",
+    [_BOOL_TO_BIT] = "_BOOL_TO_BIT",
+    [_BOOL_TO_BIT_r11] = "_BOOL_TO_BIT_r11",
     [_BUILD_INTERPOLATION] = "_BUILD_INTERPOLATION",
     [_BUILD_INTERPOLATION_r01] = "_BUILD_INTERPOLATION_r01",
     [_BUILD_LIST] = "_BUILD_LIST",
@@ -5446,6 +5490,8 @@ const char *const _PyOpcode_uop_name[MAX_UOP_REGS_ID+1] = {
     [_GUARD_IP__PUSH_FRAME_r11] = "_GUARD_IP__PUSH_FRAME_r11",
     [_GUARD_IP__PUSH_FRAME_r22] = "_GUARD_IP__PUSH_FRAME_r22",
     [_GUARD_IP__PUSH_FRAME_r33] = "_GUARD_IP__PUSH_FRAME_r33",
+    [_GUARD_IS_FALSE_BIT_POP] = "_GUARD_IS_FALSE_BIT_POP",
+    [_GUARD_IS_FALSE_BIT_POP_r10] = "_GUARD_IS_FALSE_BIT_POP_r10",
     [_GUARD_IS_FALSE_POP] = "_GUARD_IS_FALSE_POP",
     [_GUARD_IS_FALSE_POP_r00] = "_GUARD_IS_FALSE_POP_r00",
     [_GUARD_IS_FALSE_POP_r10] = "_GUARD_IS_FALSE_POP_r10",
@@ -5458,6 +5504,8 @@ const char *const _PyOpcode_uop_name[MAX_UOP_REGS_ID+1] = {
     [_GUARD_IS_NONE_POP_r32] = "_GUARD_IS_NONE_POP_r32",
     [_GUARD_IS_NOT_NONE_POP] = "_GUARD_IS_NOT_NONE_POP",
     [_GUARD_IS_NOT_NONE_POP_r10] = "_GUARD_IS_NOT_NONE_POP_r10",
+    [_GUARD_IS_TRUE_BIT_POP] = "_GUARD_IS_TRUE_BIT_POP",
+    [_GUARD_IS_TRUE_BIT_POP_r10] = "_GUARD_IS_TRUE_BIT_POP_r10",
     [_GUARD_IS_TRUE_POP] = "_GUARD_IS_TRUE_POP",
     [_GUARD_IS_TRUE_POP_r00] = "_GUARD_IS_TRUE_POP_r00",
     [_GUARD_IS_TRUE_POP_r10] = "_GUARD_IS_TRUE_POP_r10",
@@ -6162,15 +6210,15 @@ const char *const _PyOpcode_uop_name[MAX_UOP_REGS_ID+1] = {
     [_TIER2_RESUME_CHECK_r33] = "_TIER2_RESUME_CHECK_r33",
     [_TO_BOOL] = "_TO_BOOL",
     [_TO_BOOL_r11] = "_TO_BOOL_r11",
+    [_TO_BOOL_BIT_INT] = "_TO_BOOL_BIT_INT",
+    [_TO_BOOL_BIT_INT_r11] = "_TO_BOOL_BIT_INT_r11",
+    [_TO_BOOL_BIT_STR] = "_TO_BOOL_BIT_STR",
+    [_TO_BOOL_BIT_STR_r11] = "_TO_BOOL_BIT_STR_r11",
     [_TO_BOOL_BOOL] = "_TO_BOOL_BOOL",
     [_TO_BOOL_BOOL_r01] = "_TO_BOOL_BOOL_r01",
     [_TO_BOOL_BOOL_r11] = "_TO_BOOL_BOOL_r11",
     [_TO_BOOL_BOOL_r22] = "_TO_BOOL_BOOL_r22",
     [_TO_BOOL_BOOL_r33] = "_TO_BOOL_BOOL_r33",
-    [_TO_BOOL_INT] = "_TO_BOOL_INT",
-    [_TO_BOOL_INT_r02] = "_TO_BOOL_INT_r02",
-    [_TO_BOOL_INT_r12] = "_TO_BOOL_INT_r12",
-    [_TO_BOOL_INT_r23] = "_TO_BOOL_INT_r23",
     [_TO_BOOL_LIST] = "_TO_BOOL_LIST",
     [_TO_BOOL_LIST_r02] = "_TO_BOOL_LIST_r02",
     [_TO_BOOL_LIST_r12] = "_TO_BOOL_LIST_r12",
@@ -6180,10 +6228,6 @@ const char *const _PyOpcode_uop_name[MAX_UOP_REGS_ID+1] = {
     [_TO_BOOL_NONE_r11] = "_TO_BOOL_NONE_r11",
     [_TO_BOOL_NONE_r22] = "_TO_BOOL_NONE_r22",
     [_TO_BOOL_NONE_r33] = "_TO_BOOL_NONE_r33",
-    [_TO_BOOL_STR] = "_TO_BOOL_STR",
-    [_TO_BOOL_STR_r02] = "_TO_BOOL_STR_r02",
-    [_TO_BOOL_STR_r12] = "_TO_BOOL_STR_r12",
-    [_TO_BOOL_STR_r23] = "_TO_BOOL_STR_r23",
     [_UNARY_INVERT] = "_UNARY_INVERT",
     [_UNARY_INVERT_r12] = "_UNARY_INVERT_r12",
     [_UNARY_NEGATIVE] = "_UNARY_NEGATIVE",
@@ -6332,7 +6376,7 @@ int _PyUop_num_popped(int opcode, int oparg)
             return 1;
         case _TO_BOOL_BOOL:
             return 0;
-        case _TO_BOOL_INT:
+        case _TO_BOOL_BIT_INT:
             return 1;
         case _GUARD_NOS_LIST:
             return 0;
@@ -6350,7 +6394,7 @@ int _PyUop_num_popped(int opcode, int oparg)
             return 0;
         case _GUARD_TOS_UNICODE:
             return 0;
-        case _TO_BOOL_STR:
+        case _TO_BOOL_BIT_STR:
             return 1;
         case _REPLACE_WITH_TRUE:
             return 1;
@@ -6939,6 +6983,14 @@ int _PyUop_num_popped(int opcode, int oparg)
         case _GUARD_BIT_IS_UNSET_POP_7:
             return 1;
         case _GUARD_BIT_IS_UNSET_POP:
+            return 1;
+        case _BIT_TO_BOOL:
+            return 1;
+        case _BOOL_TO_BIT:
+            return 1;
+        case _GUARD_IS_TRUE_BIT_POP:
+            return 1;
+        case _GUARD_IS_FALSE_BIT_POP:
             return 1;
         case _GUARD_IS_NONE_POP:
             return 1;

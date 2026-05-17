@@ -73,10 +73,28 @@ static const _PyStackRef PyStackRef_ERROR = { .index = (1 << Py_TAGGED_SHIFT) };
 #define PyStackRef_None ((_PyStackRef){ .index = (2 << Py_TAGGED_SHIFT) } )
 #define _Py_STACKREF_FALSE_INDEX (3 << Py_TAGGED_SHIFT)
 #define _Py_STACKREF_TRUE_INDEX (4 << Py_TAGGED_SHIFT)
+/* Tier-2 transient bit values (gh-149238). */
+#define _Py_STACKREF_BIT_0_INDEX (5 << Py_TAGGED_SHIFT)
+#define _Py_STACKREF_BIT_1_INDEX (6 << Py_TAGGED_SHIFT)
 #define PyStackRef_False ((_PyStackRef){ .index = _Py_STACKREF_FALSE_INDEX })
 #define PyStackRef_True ((_PyStackRef){ .index = _Py_STACKREF_TRUE_INDEX })
 
-#define INITIAL_STACKREF_INDEX (5 << Py_TAGGED_SHIFT)
+static inline _PyStackRef
+PyStackRef_WrapBit(int truthy)
+{
+    return (_PyStackRef){ .index = truthy ? _Py_STACKREF_BIT_1_INDEX
+                                          : _Py_STACKREF_BIT_0_INDEX };
+}
+
+static inline int
+PyStackRef_UnwrapBit(_PyStackRef bit)
+{
+    assert(bit.index == _Py_STACKREF_BIT_0_INDEX ||
+           bit.index == _Py_STACKREF_BIT_1_INDEX);
+    return (bit.index == _Py_STACKREF_BIT_1_INDEX) ? 1 : 0;
+}
+
+#define INITIAL_STACKREF_INDEX (7 << Py_TAGGED_SHIFT)
 
 #define PyStackRef_ZERO_BITS PyStackRef_NULL
 
@@ -471,6 +489,19 @@ static const _PyStackRef PyStackRef_NULL = { .bits = PyStackRef_NULL_BITS };
 #define PyStackRef_True ((_PyStackRef){.bits = ((uintptr_t)&_Py_TrueStruct) | Py_TAG_REFCNT })
 #define PyStackRef_False ((_PyStackRef){.bits = ((uintptr_t)&_Py_FalseStruct) | Py_TAG_REFCNT })
 #define PyStackRef_None ((_PyStackRef){.bits = ((uintptr_t)&_Py_NoneStruct) | Py_TAG_REFCNT })
+
+static inline _PyStackRef
+PyStackRef_WrapBit(int truthy)
+{
+    return (_PyStackRef){ .bits = (uintptr_t)(truthy ? 1 : 0) };
+}
+
+static inline int
+PyStackRef_UnwrapBit(_PyStackRef bit)
+{
+    assert(bit.bits == 0 || bit.bits == 1);
+    return (int)bit.bits;
+}
 
 #ifdef Py_GIL_DISABLED
 // Checks that mask out the deferred bit in the free threading build.

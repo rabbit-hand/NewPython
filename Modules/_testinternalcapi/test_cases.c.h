@@ -12419,8 +12419,8 @@
             INSTRUCTION_STATS(TO_BOOL_INT);
             static_assert(INLINE_CACHE_ENTRIES_TO_BOOL == 3, "incorrect cache size");
             _PyStackRef value;
+            _PyStackRef bit;
             _PyStackRef res;
-            _PyStackRef v;
             // _GUARD_TOS_INT
             {
                 value = stack_pointer[-1];
@@ -12433,18 +12433,27 @@
             }
             /* Skip 1 cache entry */
             /* Skip 2 cache entries */
-            // _TO_BOOL_INT
+            // _TO_BOOL_BIT_INT
             {
                 STAT_INC(TO_BOOL, hit);
                 PyObject *value_o = PyStackRef_AsPyObjectBorrow(value);
-                res = (_PyLong_IsZero((PyLongObject *)value_o)) ? PyStackRef_False : PyStackRef_True;
-                v = value;
-            }
-            // _POP_TOP_INT
-            {
-                value = v;
-                assert(PyLong_CheckExact(PyStackRef_AsPyObjectBorrow(value)));
+                int truthy = _PyLong_IsZero((PyLongObject *)value_o) ? 0 : 1;
                 PyStackRef_CLOSE_SPECIALIZED(value, _PyLong_ExactDealloc);
+                stack_pointer += -1;
+                ASSERT_WITHIN_STACK_BOUNDS(__FILE__, __LINE__);
+                _PyFrame_SetStackPointer(frame, stack_pointer);
+                bit = PyStackRef_WrapBit(truthy);
+                stack_pointer = _PyFrame_GetStackPointer(frame);
+            }
+            // _BIT_TO_BOOL
+            {
+                stack_pointer[0] = bit;
+                stack_pointer += 1;
+                ASSERT_WITHIN_STACK_BOUNDS(__FILE__, __LINE__);
+                _PyFrame_SetStackPointer(frame, stack_pointer);
+                int b = PyStackRef_UnwrapBit(bit);
+                stack_pointer = _PyFrame_GetStackPointer(frame);
+                res = b ? PyStackRef_True : PyStackRef_False;
             }
             stack_pointer[-1] = res;
             DISPATCH();
@@ -12536,8 +12545,8 @@
             INSTRUCTION_STATS(TO_BOOL_STR);
             static_assert(INLINE_CACHE_ENTRIES_TO_BOOL == 3, "incorrect cache size");
             _PyStackRef value;
+            _PyStackRef bit;
             _PyStackRef res;
-            _PyStackRef v;
             // _GUARD_TOS_UNICODE
             {
                 value = stack_pointer[-1];
@@ -12550,18 +12559,27 @@
             }
             /* Skip 1 cache entry */
             /* Skip 2 cache entries */
-            // _TO_BOOL_STR
+            // _TO_BOOL_BIT_STR
             {
                 STAT_INC(TO_BOOL, hit);
                 PyObject *value_o = PyStackRef_AsPyObjectBorrow(value);
-                res = value_o == &_Py_STR(empty) ? PyStackRef_False : PyStackRef_True;
-                v = value;
-            }
-            // _POP_TOP_UNICODE
-            {
-                value = v;
-                assert(PyUnicode_CheckExact(PyStackRef_AsPyObjectBorrow(value)));
+                int truthy = value_o == &_Py_STR(empty) ? 0 : 1;
                 PyStackRef_CLOSE_SPECIALIZED(value, _PyUnicode_ExactDealloc);
+                stack_pointer += -1;
+                ASSERT_WITHIN_STACK_BOUNDS(__FILE__, __LINE__);
+                _PyFrame_SetStackPointer(frame, stack_pointer);
+                bit = PyStackRef_WrapBit(truthy);
+                stack_pointer = _PyFrame_GetStackPointer(frame);
+            }
+            // _BIT_TO_BOOL
+            {
+                stack_pointer[0] = bit;
+                stack_pointer += 1;
+                ASSERT_WITHIN_STACK_BOUNDS(__FILE__, __LINE__);
+                _PyFrame_SetStackPointer(frame, stack_pointer);
+                int b = PyStackRef_UnwrapBit(bit);
+                stack_pointer = _PyFrame_GetStackPointer(frame);
+                res = b ? PyStackRef_True : PyStackRef_False;
             }
             stack_pointer[-1] = res;
             DISPATCH();

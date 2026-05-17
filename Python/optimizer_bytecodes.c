@@ -665,14 +665,16 @@ dummy_func(void) {
         }
     }
 
-    op(_TO_BOOL_INT, (value -- res, v)) {
-        int already_bool = optimize_to_bool(this_instr, ctx, value, &res,
-                                            _NOP, _SWAP);
-        if (!already_bool) {
-            sym_set_type(value, &PyLong_Type);
-            res = sym_new_truthiness(ctx, value, true);
+    op(_TO_BOOL_BIT_INT, (value -- bit)) {
+        int already_bool = optimize_to_bool(this_instr, ctx, value, &bit,
+                                            _POP_TOP, _NOP);
+        if (already_bool) {
+            ADD_OP(_BOOL_TO_BIT, 0, 0);
         }
-        v = value;
+        else {
+            sym_set_type(value, &PyLong_Type);
+            bit = sym_new_truthiness(ctx, value, true);
+        }
     }
 
     op(_TO_BOOL_LIST, (value -- res, v)) {
@@ -711,12 +713,14 @@ dummy_func(void) {
         sym_set_type(value, &PyUnicode_Type);
     }
 
-    op(_TO_BOOL_STR, (value -- res, v)) {
-        int already_bool = optimize_to_bool(this_instr, ctx, value, &res,
-                                            _NOP, _SWAP);
-        v = value;
-        if (!already_bool) {
-            res = sym_new_truthiness(ctx, value, true);
+    op(_TO_BOOL_BIT_STR, (value -- bit)) {
+        int already_bool = optimize_to_bool(this_instr, ctx, value, &bit,
+                                            _POP_TOP, _NOP);
+        if (already_bool) {
+            ADD_OP(_BOOL_TO_BIT, 0, 0);
+        }
+        else {
+            bit = sym_new_truthiness(ctx, value, true);
         }
     }
 
@@ -1958,6 +1962,28 @@ dummy_func(void) {
         vs2 = value2_st;
     }
 
+    op(_BIT_TO_BOOL, (bit -- res)) {
+        if (uop_buffer_length(&ctx->out_buffer) > 0 &&
+            uop_buffer_last(&ctx->out_buffer)->opcode == _BOOL_TO_BIT) {
+            REPLACE_OP(uop_buffer_last(&ctx->out_buffer), _NOP, 0, 0);
+            REPLACE_OP(this_instr, _NOP, 0, 0);
+            res = bit;
+        }
+        else {
+            res = sym_new_truthiness(ctx, bit, true);
+        }
+    }
+
+    op(_BOOL_TO_BIT, (value -- bit)) {
+        bit = sym_new_truthiness(ctx, value, true);
+    }
+
+    op(_GUARD_IS_TRUE_BIT_POP, (bit -- )) {
+    }
+
+    op(_GUARD_IS_FALSE_BIT_POP, (bit -- )) {
+    }
+
     op(_GUARD_IS_TRUE_POP, (flag -- )) {
         sym_apply_predicate_narrowing(ctx, flag, true);
 
@@ -1965,6 +1991,11 @@ dummy_func(void) {
             PyObject *value = sym_get_const(ctx, flag);
             assert(value != NULL);
             eliminate_pop_guard(this_instr, ctx, value != Py_True);
+        }
+        else if (uop_buffer_length(&ctx->out_buffer) > 0 &&
+                 uop_buffer_last(&ctx->out_buffer)->opcode == _BIT_TO_BOOL) {
+            REPLACE_OP(uop_buffer_last(&ctx->out_buffer), _NOP, 0, 0);
+            ADD_OP(_GUARD_IS_TRUE_BIT_POP, 0, 0);
         }
         else {
             int bit = get_test_bit_for_bools();
@@ -1985,6 +2016,11 @@ dummy_func(void) {
             PyObject *value = sym_get_const(ctx, flag);
             assert(value != NULL);
             eliminate_pop_guard(this_instr, ctx, value != Py_False);
+        }
+        else if (uop_buffer_length(&ctx->out_buffer) > 0 &&
+                 uop_buffer_last(&ctx->out_buffer)->opcode == _BIT_TO_BOOL) {
+            REPLACE_OP(uop_buffer_last(&ctx->out_buffer), _NOP, 0, 0);
+            ADD_OP(_GUARD_IS_FALSE_BIT_POP, 0, 0);
         }
         else {
             int bit = get_test_bit_for_bools();
