@@ -121,8 +121,10 @@ static void _PySSLFixErrno(void) {
 #endif
 
 /* Include generated data (error codes) */
-/* See make_ssl_data.h for notes on adding a new version. */
-#if (OPENSSL_VERSION_NUMBER >= 0x30401000L)
+/* See Tools/ssl/make_ssl_data.py for notes on adding a new version. */
+#if (OPENSSL_VERSION_NUMBER >= 0x40000000L)
+#  include "_ssl_data_40.h"
+#elif (OPENSSL_VERSION_NUMBER >= 0x30401000L)
 #include "_ssl_data_35.h"
 #elif (OPENSSL_VERSION_NUMBER >= 0x30100000L)
 #include "_ssl_data_340.h"
@@ -132,6 +134,17 @@ static void _PySSLFixErrno(void) {
 #include "_ssl_data_111.h"
 #else
 #error Unsupported OpenSSL version
+#endif
+
+#if (OPENSSL_VERSION_NUMBER >= 0x40000000L)
+#  define OPENSSL_NO_SSL3
+#  define OPENSSL_NO_TLS1
+#  define OPENSSL_NO_TLS1_1
+#  define OPENSSL_NO_TLS1_2
+#  define OPENSSL_NO_SSL3_METHOD
+#  define OPENSSL_NO_TLS1_METHOD
+#  define OPENSSL_NO_TLS1_1_METHOD
+#  define OPENSSL_NO_TLS1_2_METHOD
 #endif
 
 /* OpenSSL API 1.1.0+ does not include version methods */
@@ -339,6 +352,16 @@ typedef struct {
      * and shutdown methods check for chained exceptions.
      */
     PyObject *exc;
+    // gh-148292: If non-zero, read(), sendfile(), write() and do_handshake()
+    // methods raise SSLEOFError without calling the underlying OpenSSL
+    // function. Set to 1 on PY_SSL_ERROR_EOF error.
+    //
+    // On OpenSSL 4, if SSL_read_ex() fails with
+    // SSL_R_UNEXPECTED_EOF_WHILE_READING, the following SSL_read_ex() call
+    // fails with a generic protocol error (ERR_peek_last_error() returns 0).
+    // Use got_eof_error to have the same behavior on OpenSSL 4 and newer and
+    // on OpenSSL 3 and older.
+    int got_eof_error;
 } PySSLSocket;
 
 #define PySSLSocket_CAST(op)    ((PySSLSocket *)(op))
@@ -485,6 +508,10 @@ fill_and_set_sslerror(_sslmodulestate *state,
     PyObject *verify_obj = NULL, *verify_code_obj = NULL;
     PyObject *init_value, *msg, *key;
     PyUnicodeWriter *writer = NULL;
+
+    if (ssl_errno == PY_SSL_ERROR_EOF && sslsock != NULL) {
+        sslsock->got_eof_error = 1;
+    }
 
     if (errcode != 0) {
         int lib, reason;
@@ -640,6 +667,18 @@ PySSL_ChainExceptions(PySSLSocket *sslsock) {
     sslsock->exc = NULL;
     return -1;
 }
+
+
+static void
+set_eof_error(PySSLSocket *sslsock)
+{
+    _sslmodulestate *state = get_state_sock(sslsock);
+    fill_and_set_sslerror(state, sslsock, state->PySSLEOFErrorObject,
+                          PY_SSL_ERROR_EOF,
+                          "EOF occurred in violation of protocol",
+                          __LINE__, 0);
+}
+
 
 static PyObject *
 PySSL_SetError(PySSLSocket *sslsock, const char *filename, int lineno)
@@ -888,6 +927,7 @@ newPySSLSocket(PySSLContext *sslctx, PySocketSockObject *sock,
     self->server_hostname = NULL;
     self->err = err;
     self->exc = NULL;
+    self->got_eof_error = 0;
 
     /* Make sure the SSL error state is initialized */
     ERR_clear_error();
@@ -1028,6 +1068,11 @@ _ssl__SSLSocket_do_handshake_impl(PySSLSocket *self)
         BIO_set_nbio(SSL_get_wbio(self->ssl), nonblocking);
     }
 
+    if (self->got_eof_error) {
+        set_eof_error(self);
+        goto error;
+    }
+
     timeout = GET_SOCKET_TIMEOUT(sock);
     has_timeout = (timeout > 0);
     if (has_timeout) {
@@ -1133,7 +1178,7 @@ _asn1obj2py(_sslmodulestate *state, const ASN1_OBJECT *name, int no_name)
 
 static PyObject *
 _create_tuple_for_attribute(_sslmodulestate *state,
-                            ASN1_OBJECT *name, ASN1_STRING *value)
+                            const ASN1_OBJECT *name, const ASN1_STRING *value)
 {
     Py_ssize_t buflen;
     PyObject *pyattr;
@@ -1162,16 +1207,16 @@ _create_tuple_for_attribute(_sslmodulestate *state,
 }
 
 static PyObject *
-_create_tuple_for_X509_NAME (_sslmodulestate *state, X509_NAME *xname)
+_create_tuple_for_X509_NAME(_sslmodulestate *state, const X509_NAME *xname)
 {
     PyObject *dn = NULL;    /* tuple which represents the "distinguished name" */
     PyObject *rdn = NULL;   /* tuple to hold a "relative distinguished name" */
     PyObject *rdnt;
     PyObject *attr = NULL;   /* tuple to hold an attribute */
     int entry_count = X509_NAME_entry_count(xname);
-    X509_NAME_ENTRY *entry;
-    ASN1_OBJECT *name;
-    ASN1_STRING *value;
+    const X509_NAME_ENTRY *entry;
+    const ASN1_OBJECT *name;
+    const ASN1_STRING *value;
     int index_counter;
     int rdn_level = -1;
     int retcode;
@@ -2491,6 +2536,11 @@ _ssl__SSLSocket_write_impl(PySSLSocket *self, Py_buffer *b)
         BIO_set_nbio(SSL_get_wbio(self->ssl), nonblocking);
     }
 
+    if (self->got_eof_error) {
+        set_eof_error(self);
+        goto error;
+    }
+
     timeout = GET_SOCKET_TIMEOUT(sock);
     has_timeout = (timeout > 0);
     if (has_timeout) {
@@ -2629,6 +2679,11 @@ _ssl__SSLSocket_read_impl(PySSLSocket *self, Py_ssize_t len,
             return NULL;
         }
         Py_INCREF(sock);
+    }
+
+    if (self->got_eof_error) {
+        set_eof_error(self);
+        goto error;
     }
 
     if (!group_right_1) {
@@ -6506,9 +6561,15 @@ sslmodule_init_constants(PyObject *m)
     ADD_INT_CONST("PROTOCOL_TLS", PY_SSL_VERSION_TLS);
     ADD_INT_CONST("PROTOCOL_TLS_CLIENT", PY_SSL_VERSION_TLS_CLIENT);
     ADD_INT_CONST("PROTOCOL_TLS_SERVER", PY_SSL_VERSION_TLS_SERVER);
+#ifndef OPENSSL_NO_TLS1
     ADD_INT_CONST("PROTOCOL_TLSv1", PY_SSL_VERSION_TLS1);
+#endif
+#ifndef OPENSSL_NO_TLS1_1
     ADD_INT_CONST("PROTOCOL_TLSv1_1", PY_SSL_VERSION_TLS1_1);
+#endif
+#ifndef OPENSSL_NO_TLS1_2
     ADD_INT_CONST("PROTOCOL_TLSv1_2", PY_SSL_VERSION_TLS1_2);
+#endif
 
 #define ADD_OPTION(NAME, VALUE) if (sslmodule_add_option(m, NAME, (VALUE)) < 0) return -1
 
