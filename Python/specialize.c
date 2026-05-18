@@ -2,7 +2,7 @@
 
 #include "opcode.h"
 
-#include "pycore_bytesobject.h"   // _PyBytes_Concat
+#include "pycore_bytesobject.h"   // _PyBytes_Concat(), _PyBytes_SubscriptIndex()
 #include "pycore_code.h"
 #include "pycore_critical_section.h"
 #include "pycore_descrobject.h"   // _PyMethodWrapper_Type
@@ -2161,6 +2161,26 @@ BITWISE_LONGS_ACTION(compactlongs_and, &)
 BITWISE_LONGS_ACTION(compactlongs_xor, ^)
 #undef BITWISE_LONGS_ACTION
 
+/* bytes subscripting */
+
+static inline int
+bytes_compactlong_index_in_bounds_guard(PyObject *lhs, PyObject *rhs)
+{
+    if (!PyBytes_CheckExact(lhs) || !is_compactlong(rhs)) {
+        return 0;
+    }
+    Py_ssize_t index = _PyLong_CompactValue((PyLongObject *)rhs);
+    Py_ssize_t offset;
+    return _PyBytes_OffsetFromIndex(lhs, index, &offset);
+}
+
+static PyObject *
+bytes_compactlong_subscr(PyObject *lhs, PyObject *rhs)
+{
+    Py_ssize_t index = _PyLong_CompactValue((PyLongObject *)rhs);
+    return _PyBytes_SubscriptIndex(lhs, index);
+}
+
 /* float-long */
 
 static inline int
@@ -2240,6 +2260,10 @@ static _PyBinaryOpSpecializationDescr binaryop_extend_descrs[] = {
     {NB_INPLACE_OR, compactlongs_guard, compactlongs_or, &PyLong_Type, 1, NULL, NULL},
     {NB_INPLACE_AND, compactlongs_guard, compactlongs_and, &PyLong_Type, 1, NULL, NULL},
     {NB_INPLACE_XOR, compactlongs_guard, compactlongs_xor, &PyLong_Type, 1, NULL, NULL},
+
+    /* bytes[int]: guard includes bounds checks so the generic opcode still
+       raises IndexError for out-of-range indexes. */
+    {NB_SUBSCR, bytes_compactlong_index_in_bounds_guard, bytes_compactlong_subscr, &PyLong_Type, 1, NULL, NULL},
 
     /* float-long arithmetic: guards also check NaN and compactness. */
     {NB_ADD, float_compactlong_guard, float_compactlong_add, &PyFloat_Type, 1, NULL, NULL},
