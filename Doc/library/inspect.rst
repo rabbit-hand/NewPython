@@ -424,6 +424,13 @@ attributes (see :ref:`import-mod-attrs` for module attributes):
 
    Return ``True`` if the object is a bound method written in Python.
 
+   .. note::
+
+      Accessing an instance method through the class (rather than an instance)
+      returns a plain :term:`function`, not a bound method, so :func:`ismethod`
+      will return ``False`` in that case. See :ref:`instance-methods` in the
+      language reference for details.
+
 
 .. function:: ispackage(object)
 
@@ -437,10 +444,20 @@ attributes (see :ref:`import-mod-attrs` for module attributes):
    Return ``True`` if the object is a Python function, which includes functions
    created by a :term:`lambda` expression.
 
+   .. note::
+
+      Accessing an instance method through the instance (rather than the class)
+      returns a bound method, not a :term:`function`, so :func:`isfunction`
+      will return ``False`` in that case. See :ref:`instance-methods` in the
+      language reference for details.
+
 
 .. function:: isgeneratorfunction(object)
 
    Return ``True`` if the object is a Python generator function.
+
+   It also returns ``True`` for bound methods created from Python generator functions
+   (see :ref:`typesmethods` for more information).
 
    .. versionchanged:: 3.8
       Functions wrapped in :func:`functools.partial` now return ``True`` if the
