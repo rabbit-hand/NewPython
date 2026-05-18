@@ -3,8 +3,10 @@ import io
 import struct
 from test import support
 from test.support.import_helper import import_fresh_module
+from test.support import threading_helper
 import types
 import unittest
+import threading
 
 cET = import_fresh_module('xml.etree.ElementTree',
                           fresh=['_elementtree'])
@@ -255,6 +257,45 @@ class SizeofTest(unittest.TestCase):
         # should have space for 8 children now
         self.check_sizeof(e, self.elementsize + self.extra +
                              struct.calcsize('8P'))
+
+@unittest.skipUnless(cET, 'requires _elementtree')
+@threading_helper.requires_working_threading()
+class TestElementTreeFreeThreading(unittest.TestCase):
+    def test_element_concurrent_clear_and_access(self):
+        #Race len(), .attrib, and .clear() to verify fix for gh-149861.
+        root = cET.Element('root')
+        children = [cET.Element(f'child-{i}') for i in range(5)]
+
+        stop_event = threading.Event()
+
+        def reader_task():
+            while not stop_event.is_set():
+                len(root)
+                try:
+                    _ = root.attrib
+                except AttributeError:
+                    # In a race where clear() just ran, this is expected
+                    # because of the PyErr_SetString is added in C.
+                    pass
+
+        def writer_task():
+            while not stop_event.is_set():
+                # Test element_add_subelement / extend
+                root.extend(children)
+                # Test clear_extra
+                root.clear()
+
+        threads = []
+        for _ in range(4):
+            threads.append(threading.Thread(target=reader_task))
+        for _ in range(2):
+            threads.append(threading.Thread(target=writer_task))
+
+        with threading_helper.start_threads(threads):
+            import time
+            time.sleep(1.0)
+            stop_event.set()
+
 
 
 def install_tests():
