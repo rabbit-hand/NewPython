@@ -325,11 +325,15 @@ class ParseTest(unittest.TestCase):
         ])
 
     @support.subTests('encoding', [
-        'UTF-7',
+        'UTF8', 'UTF-7',
+        "unicode-escape", "raw-unicode-escape",
         "Big5-HKSCS", "Big5",
         "cp932", "cp949", "cp950",
         "EUC_JIS-2004", "EUC_JISX0213", "EUC-JP", "EUC-KR",
         "GB18030", "GB2312", "GBK",
+        "HZ-GB-2312",
+        "ISO-2022-JP", "ISO-2022-JP-1", "ISO-2022-JP-2004",
+        "ISO-2022-JP-2", "ISO-2022-JP-3", "ISO-2022-JP-EXT",
         "ISO-2022-KR",
         "johab",
         "Shift_JIS", "Shift_JIS-2004", "Shift_JISX0213",

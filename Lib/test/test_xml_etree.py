@@ -1039,9 +1039,11 @@ class ElementTreeTest(unittest.TestCase):
             'cp932', 'cp949', 'cp950',
             'euc-jp', 'euc-jis-2004', 'euc-jisx0213', 'euc-kr',
             'gb2312', 'gbk', 'gb18030',
-            'iso2022-kr', 'johab',
+            'iso2022-jp', 'iso2022-jp-1', 'iso2022-jp-2', 'iso2022-jp-2004',
+            'iso2022-jp-3', 'iso2022-jp-ext',
+            'iso2022-kr', 'johab', 'hz',
             'shift-jis', 'shift-jis-2004', 'shift-jisx0213',
-            'utf-7',
+            'utf-7', 'utf-8-sig', 'utf8',
         ]
         for encoding in unsupported_ascii_compatible_encodings:
             with self.subTest(encoding=encoding):
