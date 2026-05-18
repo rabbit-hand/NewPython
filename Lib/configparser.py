@@ -392,7 +392,7 @@ UNNAMED_SECTION = _UnnamedSection()
 # Used in parser getters to indicate the default behaviour when a specific
 # option is not found it to raise an exception. Created to enable `None` as
 # a valid fallback value.
-_UNSET = object()
+_UNSET = sentinel("_UNSET")
 
 
 class Interpolation:
