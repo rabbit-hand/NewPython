@@ -2187,6 +2187,31 @@ class TestRecorderTableGeneration(unittest.TestCase):
             "[OP_TYPED_SPECIALIZED] = {1, 0, {0}}",
         )
 
+    def test_record_transform_generated_from_recording_uop(self):
+        input = """
+        tier2 op(_RECORD_TOS, (tos -- tos)) {
+            RECORD_VALUE(PyStackRef_AsPyObjectBorrow(tos));
+        }
+        tier2 op(_RECORD_TOS_TYPE, (tos -- tos)) {
+            RECORD_VALUE(Py_TYPE(PyStackRef_AsPyObjectBorrow(tos)));
+        }
+        op(_DO_STUFF, (tos -- res)) {
+            res = tos;
+        }
+        macro(OP) = _RECORD_TOS + _DO_STUFF;
+        macro(OP_SPECIALIZED) = _RECORD_TOS_TYPE + _DO_STUFF;
+        family(OP, INLINE_CACHE_ENTRIES_OP) = { OP_SPECIALIZED };
+        """
+        output = self.generate_tables(input)
+        self.assertIn("_PyOpcode_RecordTransform_TOS_TYPE", output)
+        self.assertIn("tos = PyStackRef_FromPyObjectBorrow(recorded_value);", output)
+        self.assertIn(
+            "transformed_value = (PyObject *)Py_TYPE(PyStackRef_AsPyObjectBorrow(tos));",
+            output,
+        )
+        self.assertIn("return _PyOpcode_RecordTransform_TOS_TYPE(value);", output)
+        self.assertNotIn("record_trace_transform_to_type", output)
+
     def test_family_member_maps_positional_recorders_to_family_slots(self):
         input = """
         tier2 op(_RECORD_TOS, (sub -- sub)) {
@@ -2243,7 +2268,12 @@ class TestRecorderTableGeneration(unittest.TestCase):
         macro(OP_SPECIALIZED) = _RECORD_TOS + _DO_STUFF;
         family(OP, INLINE_CACHE_ENTRIES_OP) = { OP_SPECIALIZED };
         """
+        analysis = self.analyze_input(input)
         output = self.generate_tables(input)
+        self.assertEqual(
+            analysis.families["OP"].member_record_names,
+            ("_RECORD_TOS",),
+        )
         self.assertIn("[OP] = {1, {_RECORD_TOS_INDEX}}", output)
         self.assertIn("[OP_SPECIALIZED] = {1, {_RECORD_TOS_INDEX}}", output)
         self.assert_slot_map_lines(output, "[OP_SPECIALIZED] = {1, 0, {0}}")
