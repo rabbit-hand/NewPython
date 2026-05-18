@@ -282,6 +282,48 @@ _PyImport_ClearLazyModules(PyInterpreterState *interp)
     Py_CLEAR(LAZY_MODULES(interp));
 }
 
+PyObject *
+_PyImport_GetLazyModulesSnapshot(PyInterpreterState *interp)
+{
+    PyObject *lazy_modules = LAZY_MODULES(interp);
+    if (lazy_modules == NULL) {
+        return PyFrozenDict_New(NULL);
+    }
+
+    PyObject *tmp = PyDict_New();
+    if (tmp == NULL) {
+        return NULL;
+    }
+
+    int err = 0;
+    Py_BEGIN_CRITICAL_SECTION(lazy_modules);
+    Py_ssize_t pos = 0;
+    PyObject *key, *value;
+    while (PyDict_Next(lazy_modules, &pos, &key, &value)) {
+        PyObject *frozen = PyFrozenSet_New(value);
+        if (frozen == NULL) {
+            err = -1;
+            break;
+        }
+        if (PyDict_SetItem(tmp, key, frozen) < 0) {
+            Py_DECREF(frozen);
+            err = -1;
+            break;
+        }
+        Py_DECREF(frozen);
+    }
+    Py_END_CRITICAL_SECTION();
+
+    if (err < 0) {
+        Py_DECREF(tmp);
+        return NULL;
+    }
+
+    PyObject *snapshot = PyFrozenDict_New(tmp);
+    Py_DECREF(tmp);
+    return snapshot;
+}
+
 static int
 import_ensure_initialized(PyInterpreterState *interp, PyObject *mod, PyObject *name)
 {

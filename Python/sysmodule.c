@@ -2879,8 +2879,45 @@ sys_get_lazy_imports_impl(PyObject *module)
     }
 }
 
+static PyObject *
+sys_getattr(PyObject *self, PyObject *args)
+{
+    PyObject *name;
+    if (!PyArg_UnpackTuple(args, "__getattr__", 1, 1, &name)) {
+        return NULL;
+    }
+
+    if (PyUnicode_Check(name) && PyUnicode_EqualToUTF8(name, "lazy_modules")) {
+        PyInterpreterState *interp = _PyInterpreterState_GET();
+        return _PyImport_GetLazyModulesSnapshot(interp);
+    }
+
+    PyErr_Format(PyExc_AttributeError,
+                 "module 'sys' has no attribute %R", name);
+    return NULL;
+}
+
+static PyObject *
+sys_dir(PyObject *self, PyObject *Py_UNUSED(ignored))
+{
+    PyObject *names = PyMapping_Keys(((PyModuleObject *)self)->md_dict);
+    if (names == NULL) {
+        return NULL;
+    }
+    PyObject *lazy = PyUnicode_FromString("lazy_modules");
+    int err = lazy ? PyList_Append(names, lazy) : -1;
+    Py_XDECREF(lazy);
+    if (err < 0) {
+        Py_DECREF(names);
+        return NULL;
+    }
+    return names;
+}
+
 static PyMethodDef sys_methods[] = {
     /* Might as well keep this in alphabetic order */
+    {"__dir__", sys_dir, METH_NOARGS, "Module __dir__"},
+    {"__getattr__", sys_getattr, METH_VARARGS, "Module __getattr__"},
     SYS_ADDAUDITHOOK_METHODDEF
     SYS_AUDIT_METHODDEF
     {"breakpointhook", _PyCFunction_CAST(sys_breakpointhook),
@@ -4315,12 +4352,14 @@ _PySys_Create(PyThreadState *tstate, PyObject **sysmod_p)
         goto error;
     }
 
+    // The live lazy import registry is exposed (undocumented) as
+    // ``sys._lazy_modules``. The public ``sys.lazy_modules`` is built on
+    // each access by ``sys.__getattr__`` (see ``sys_getattr``).
     PyObject *lazy_modules = _PyImport_InitLazyModules(interp); // borrowed reference
     if (lazy_modules == NULL) {
         goto error;
     }
-
-    if (PyDict_SetItemString(sysdict, "lazy_modules", lazy_modules) < 0) {
+    if (PyDict_SetItemString(sysdict, "_lazy_modules", lazy_modules) < 0) {
         goto error;
     }
 
