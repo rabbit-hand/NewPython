@@ -5,6 +5,7 @@ import time
 import unittest
 import sys
 import io
+import multiprocessing
 from concurrent.futures._base import BrokenExecutor
 from concurrent.futures.process import _check_system_limits
 
@@ -147,6 +148,9 @@ class FailingInitializerResourcesTest(unittest.TestCase):
         self._test(ProcessPoolSpawnFailingInitializerTest)
 
     @support.skip_if_sanitizer("TSAN doesn't support threads after fork", thread=True)
+    # Cygwin doesn't have forkserver start method
+    @unittest.skipIf('forkserver' not in multiprocessing.get_all_start_methods(),
+                     'need forkserver start method')
     def test_forkserver(self):
         self._test(ProcessPoolForkserverFailingInitializerTest)
 
