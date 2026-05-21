@@ -100,6 +100,16 @@ NewPythonで実装された、シンプルで洗練された構文のサンプ�
 ------------------------------------------------------
 NewPythonのコンパイルにはLinux環境が必要です。Windows環境では、WSL2（Windows Subsystem for Linux）を利用することで、既存の環境を汚さずに安全にビルド・実行できます。
 
+**ビルド要件:**
+- Linux環境 (WSL2推奨)
+- build-essential (gcc, make, etc.)
+- libssl-dev
+- zlib1g-dev
+- libbz2-dev
+- libreadline-dev
+- libsqlite3-dev
+- Python 3.9+ (for pegen grammar regeneration)
+
 1. **PowerShellを管理者として起動し、WSL2を有効化します:**
    .. code-block:: powershell
 
@@ -109,9 +119,14 @@ NewPythonのコンパイルにはLinux環境が必要です。Windows環境で�
    .. code-block:: bash
 
       $ sudo apt update
-      $ sudo apt install -y build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev
+      $ sudo apt install -y build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev python3 python3-pip
 
 3. **Linux用のビルド手順を実行します:**
    上記の「Linux / macOS」セクションの手順を実行することで、``/opt/koko`` に安全に隔離された ``koko`` コマンドが完成します。
+
+**注意:**
+- Windowsネイティブ環境でのビルドはサポートされていません
+- Visual StudioやMSBuildが必要なPCbuildは使用しません
+- 必ずWSL2またはLinux環境を使用してください
 
 本ソフトウェアは「現状のまま」提供され、明示的または黙示的を問わず、いかなる種類の保証もありません。これには、商品性、特定目的への適合性、および非侵害に関する保証が含まれますが、これらに限定されません。いかなる場合においても、著作者または著作権者は、契約、不法行為、その他を問わず、本ソフトウェアまたはその使用もしくはその他の取引から生じる、またはこれに関連するいかなる請求、損害、またはその他の責任についても責任を負いません。本ソフトウェアの使用は、自己責任で行ってください。
