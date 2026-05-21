@@ -1,0 +1,101 @@
+# NewPython Grammar (koko edition)
+# No colons, space-separated calls, and 'koko' block terminator.
+
+start[mod_ty]: a=statements EOF { Module(a, NULL, p->arena) }
+
+statements[stmt_ty*]: a=(statement | 'koko')+ { a }
+
+statement[stmt_ty]:
+    | compound_stmt
+    | simple_stmts
+
+simple_stmts[stmt_ty]:
+    | a=simple_stmt !';' NEWLINE { a }
+    | a=';'.simple_stmt+ [';'] NEWLINE { _PyAST_Suite(a, EXTRA) }
+
+simple_stmt[stmt_ty]:
+    | assignment
+    | e=star_expressions { _PyAST_Expr(e, EXTRA) }
+    | &'return' return_stmt
+    | &('import' | 'from') import_stmt
+    | &'raise' raise_stmt
+    | 'pass' { _PyAST_Pass(EXTRA) }
+    | &'del' del_stmt
+    | &'yield' yield_stmt
+    | &'assert' assert_stmt
+    | 'break' { _PyAST_Break(EXTRA) }
+    | 'continue' { _PyAST_Continue(EXTRA) }
+
+# -------------------------------------------------------------------------
+# 1. コロン (:) を排除した制御構文
+# -------------------------------------------------------------------------
+
+compound_stmt[stmt_ty]:
+    | if_stmt
+    | while_stmt
+    | for_stmt
+    | with_stmt
+    | def_stmt
+    | class_stmt
+
+if_stmt[stmt_ty]:
+    | 'if' a=named_expression b=block c=elif_stmt { _PyAST_If(a, b, _PyPgen_singleton_seq(p, c), EXTRA) }
+    | 'if' a=named_expression b=block c=[else_block] { _PyAST_If(a, b, c, EXTRA) }
+
+elif_stmt[stmt_ty]:
+    | 'elif' a=named_expression b=block c=elif_stmt { _PyAST_If(a, b, _PyPgen_singleton_seq(p, c), EXTRA) }
+    | 'elif' a=named_expression b=block c=[else_block] { _PyAST_If(a, b, c, EXTRA) }
+
+else_block[asdl_stmt_seq*]: 'else' b=block { b }
+
+while_stmt[stmt_ty]:
+    | 'while' a=named_expression b=block c=[else_block] { _PyAST_While(a, b, c, EXTRA) }
+
+def_stmt[stmt_ty]:
+    | 'def' n=NAME '(' params=[params] ')' b=block { _PyAST_FunctionDef(n, params, b, NULL, NULL, EXTRA) }
+
+# -------------------------------------------------------------------------
+# 2. スペース区切りの関数呼び出し (math.sin 0) を可能にする primary ルール
+# -------------------------------------------------------------------------
+
+primary:
+    | primary '.' NAME expressions { _PyPgen_arguments(p, expressions) }
+    | primary expressions { _PyPgen_arguments(p, expressions) }
+    | primary '.' NAME 
+    | primary '(' [arguments] ')' 
+    | atom
+
+atom:
+    | NAME
+    | NUMBER
+    | strings
+    | '(' e=named_expression ')' { e }
+    | '[' [list_items] ']'
+    | '{' [dict_items] '}'
+
+# -------------------------------------------------------------------------
+# 3. インデントの代わりに 'koko' で締めるブロック定義
+# -------------------------------------------------------------------------
+
+block:
+    | NEWLINE INDENT a=statements DEDENT { a }
+    | simple_stmts
+
+# -------------------------------------------------------------------------
+# 4. ブラケット文字列 [ ] の試験的定義
+# -------------------------------------------------------------------------
+
+strings:
+    | STRING
+    | '[' s=NAME ']' { _PyAST_Constant(s, NULL, EXTRA) }
+
+# -------------------------------------------------------------------------
+# その他、必要な最小限の式定義
+# -------------------------------------------------------------------------
+
+expressions: a=expression b=(',' expression)* [','] { _PyPgen_collect_seq(p, a, b) }
+expression: named_expression
+named_expression: assignment | star_expressions
+star_expressions: a=star_expression b=(',' star_expression)* [','] { _PyPgen_collect_seq(p, a, b) }
+star_expression: bitwise_or
+bitwise_or: NAME # (簡略化のためNAMEのみ。本来は演算子が続く)

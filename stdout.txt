@@ -1,0 +1,10 @@
+Visual Studio Installer 4.6.58+bbebd0ce93
+c Microsoft Corporation. All rights reserved.
+
+ERROR(S):
+  Verb '/?' is not recognized.
+
+  --help       Display this help screen.
+
+  --version    Display version information.
+
