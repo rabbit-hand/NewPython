@@ -55,6 +55,8 @@ ELLIPSIS                '...'
 COLONEQUAL              ':='
 EXCLAMATION             '!'
 
+KOKO                    'koko'
+
 OP
 AWAIT
 ASYNC
