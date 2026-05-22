@@ -1,0 +1,23 @@
+# Functions Example
+# Demonstrating function definitions and usage
+
+def greet name
+    print [Hello] name [!]
+
+def add_numbers a b
+    return a + b
+
+def factorial n
+    if n <= 1
+        return 1
+    else
+        return n * factorial n - 1
+
+# Using the functions
+greet [Alice]
+result = add_numbers 5 3
+print [5 + 3 =] result
+
+fact = factorial 5
+print [5! =] fact
+end

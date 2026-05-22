@@ -1,0 +1,21 @@
+# Loops Example
+# Demonstrating various loop constructs in NewPython
+
+# For loop
+print [For loop example:]
+for i in range 5
+    print [Iteration] i
+
+# While loop
+print [While loop example:]
+count = 0
+while count < 3
+    print [Count] count
+    count = count + 1
+
+# Nested loops
+print [Nested loops:]
+for i in range 3
+    for j in range 2
+        print [i] i [j] j
+end

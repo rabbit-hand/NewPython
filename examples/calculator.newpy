@@ -1,0 +1,27 @@
+# Calculator Example
+# A simple calculator class demonstrating NewPython syntax
+
+class Calculator
+    def __init__ self
+        self.result = 0
+    
+    def add self value
+        self.result = self.result + value
+        return self.result
+    
+    def subtract self value
+        self.result = self.result - value
+        return self.result
+    
+    def multiply self value
+        self.result = self.result * value
+        return self.result
+    
+    def divide self value
+        if value != 0
+            self.result = self.result / value
+            return self.result
+        else
+            print [Cannot divide by zero]
+            return None
+end
