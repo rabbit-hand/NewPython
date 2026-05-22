@@ -49,3 +49,10 @@ repos:
     hooks:
       - id: check-hooks-apply
       - id: check-useless-excludes
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+    -   id: trailing-whitespace
+        exclude: Lib/koko.py  # ← これを追加してください
+    -   id: end-of-file-fixer 
