@@ -5,8 +5,10 @@ import logging
 # ログ設定（デバッグ時に役立ちます）
 logging.basicConfig(level=logging.INFO)
 
+
 def _is_windows():
     return platform.system() == "Windows"
+
 
 # 必要に応じてpyautoguiをインポート
 if _is_windows():
@@ -17,6 +19,7 @@ if _is_windows():
     except ImportError:
         logging.error("pyautoguiがインストールされていません。'pip install pyautogui' を実行してください。")
         pyautogui = None
+
 
 class Mouse:
     @staticmethod
@@ -32,6 +35,7 @@ class Mouse:
         except Exception as e:
             logging.error(f"マウス操作に失敗しました: {e}")
 
+
 class Keyboard:
     @staticmethod
     def type(text):
@@ -46,9 +50,11 @@ class Keyboard:
         except Exception as e:
             logging.error(f"キーボード入力に失敗しました: {e}")
 
+
 def run(cmd):
     try:
         return subprocess.check_output(cmd, shell=True, text=True)
     except subprocess.CalledProcessError as e:
         logging.error(f"コマンド実行失敗: {e}")
         return ""
+        
