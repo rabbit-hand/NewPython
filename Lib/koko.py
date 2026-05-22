@@ -5,6 +5,9 @@ import logging
 # ログ設定（デバッグ時に役立ちます）
 logging.basicConfig(level=logging.INFO)
 
+# グローバル変数の初期化
+pyautogui = None
+
 
 def _is_windows():
     return platform.system() == "Windows"
@@ -28,6 +31,9 @@ class Mouse:
             if _is_windows():
                 if pyautogui:
                     pyautogui.click(x, y)
+                else:
+                    logging.warning("pyautoguiが利用できません")
+                    return
             else:
                 # Linux系環境
                 subprocess.run(["xdotool", "mousemove", str(x), str(y), "click", "1"], check=True)
@@ -43,6 +49,9 @@ class Keyboard:
             if _is_windows():
                 if pyautogui:
                     pyautogui.write(text)
+                else:
+                    logging.warning("pyautoguiが利用できません")
+                    return
             else:
                 # Linux系環境
                 subprocess.run(["xdotool", "type", text], check=True)
@@ -57,3 +66,4 @@ def run(cmd):
     except subprocess.CalledProcessError as e:
         logging.error(f"コマンド実行失敗: {e}")
         return ""
+
