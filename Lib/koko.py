@@ -52,4 +52,3 @@ def run(cmd):
     except subprocess.CalledProcessError as e:
         logging.error(f"コマンド実行失敗: {e}")
         return ""
-        
