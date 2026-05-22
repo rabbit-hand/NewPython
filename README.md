@@ -26,7 +26,6 @@ NewPython v2 is an experimental programming language variant that modifies Pytho
 
 - [What is NewPython v2?](#what-is-newpython-v2)
 - [Key Features](#key-features)
-- [Security](#security)
 - [Download and Installation](#download-and-installation)
 - [Usage](#usage)
 - [Syntax Guide](#syntax-guide)
@@ -49,21 +48,6 @@ NewPython v2 introduces a simplified block syntax that uses indentation to struc
 - **Bracket Strings**: Use `[text]` for string literals
 - **Simplified Lambda**: `lambda x x * x` instead of `lambda x: x * x`
 - **Function Call Sugar**: Implicit parentheses for simple calls
-
----
-
-## Security
-
-This project implements several security measures:
-
-- **File Size Limits**: Maximum file size of 10MB
-- **Line Length Limits**: Maximum line length of 10,000 characters
-- **Path Validation**: Prevents path traversal attacks
-- **File Extension Validation**: Only allows `.newpy`, `.py`, and `.txt` files
-- **UTF-8 Encoding**: Enforces UTF-8 encoding for all source files
-- **Input Validation**: Comprehensive validation of all inputs
-
-For detailed security information, see [SECURITY.md](SECURITY.md).
 
 ---
 
@@ -287,7 +271,6 @@ PASS: lambda and bracket string
 
 - **[README_EN.md](README_EN.md)** - Comprehensive English documentation
 - **[README_JA.md](README_JA.md)** - 日本語ドキュメント (Japanese documentation)
-- **[SECURITY.md](SECURITY.md)** - Security guidelines and information
 - **[LANGUAGE_SPEC.md](LANGUAGE_SPEC.md)** - Detailed language specification
 
 ---
